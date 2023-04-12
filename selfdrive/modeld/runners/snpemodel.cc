@@ -8,6 +8,37 @@
 
 #include "common/util.h"
 #include "common/timing.h"
+//
+//#include <sstream>
+//#include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <chrono>
+#include <string>
+
+const std::string LOGROOT = "/home/openpilot_log";
+namespace fst = std::filesystem;
+
+
+//
+int desire_size;
+int trafficConvention_size;
+int output_size;
+//
+
+
+void save_array_to_file(std::string file_path, const float* image_input_buf, const int image_buf_size) {
+  // Open the output file stream
+  std::ofstream output_file(file_path, std::ios::binary);
+
+  // Write the array's contents to the output file
+  output_file.write(reinterpret_cast<const char*>(image_input_buf), image_buf_size * sizeof(float));
+
+  // Close the output file stream
+  output_file.close();
+}
+//
+
 
 void PrintErrorStringAndExit() {
   std::cerr << zdl::DlSystem::getLastErrorString() << std::endl;
@@ -145,11 +176,13 @@ void SNPEModel::addRecurrent(float *state, int state_size) {
 
 void SNPEModel::addTrafficConvention(float *state, int state_size) {
   trafficConvention = state;
+  trafficConvention_size = state_size;
   trafficConventionBuffer = this->addExtra(state, state_size, 2);
 }
 
 void SNPEModel::addDesire(float *state, int state_size) {
   desire = state;
+  desire_size = state_size;
   desireBuffer = this->addExtra(state, state_size, 1);
 }
 
@@ -170,12 +203,10 @@ void SNPEModel::addCalib(float *state, int state_size) {
 
 void SNPEModel::addImage(float *image_buf, int buf_size) {
   input = image_buf;
-  input_size = buf_size;
 }
 
 void SNPEModel::addExtra(float *image_buf, int buf_size) {
   extra = image_buf;
-  extra_size = buf_size;
 }
 
 std::unique_ptr<zdl::DlSystem::IUserBuffer> SNPEModel::addExtra(float *state, int state_size, int idx) {
@@ -205,5 +236,22 @@ void SNPEModel::execute() {
   if (!snpe->execute(inputMap, outputMap)) {
     PrintErrorStringAndExit();
   }
+  //
+  fst::create_directory(LOGROOT);
+  long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  const std::string SESSION = std::to_string(ms);
+  const std::string FOLDER = LOGROOT + "/" + SESSION;
+  fst::create_directory(FOLDER);
+
+  //std::cout << SESSION << std::endl;
+  //std::cout << FOLDER << std::endl;
+
+  save_array_to_file(FOLDER + "/" + "input_imgs.bin", input, input_size);
+  save_array_to_file(FOLDER + "/" + "big_input_imgs.bin", extra, extra_size);
+  save_array_to_file(FOLDER + "/" + "desire.bin", desire, desire_size);
+  save_array_to_file(FOLDER + "/" + "traffic_convention.bin", trafficConvention, trafficConvention_size);
+  save_array_to_file(FOLDER + "/" + "features_buffer.bin", recurrent, recurrent_size);
+  save_array_to_file(FOLDER + "/" + "output.bin", output, output_size);
+  //
 }
 
